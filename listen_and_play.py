@@ -38,6 +38,10 @@ class ListenAndPlayArguments:
         default=False,
         metadata={"help": "Enable audio file debug mode. Default is False."},
     )
+    debug_audio_listen: bool = field(
+        default=False,
+        metadata={"help": "Enable audio file debug mode. Default is False."},
+    )
     verbose: bool = field(
         default=False,
         metadata={"help": "Enable verbose output. Default is False."},
@@ -52,6 +56,7 @@ def listen_and_play(
     send_port=12345,
     recv_port=12346,
     debug_audio=False,
+    debug_audio_listen=False,
     verbose=False,
 ):
     send_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -65,14 +70,7 @@ def listen_and_play(
     stop_event = threading.Event()
     recv_queue = Queue()
     send_queue = Queue()
-
-    def callback_recv(outdata, frames, time, status):
-        if not recv_queue.empty():
-            data = recv_queue.get()
-            outdata[: len(data)] = data
-            outdata[len(data) :] = b"\x00" * (len(outdata) - len(data))
-        else:
-            outdata[:] = b"\x00" * len(outdata)
+    file_change_event = threading.Event()
 
     def callback_send(indata, frames, time, status):
         if status:
@@ -170,7 +168,7 @@ def listen_and_play(
                     yield data
 
     try:
-        if debug_audio:
+        if debug_audio or debug_audio_listen:
             audio_file_path = ask_for_audio_file()
 
             audio_stream = audio_input_stream(
@@ -178,6 +176,7 @@ def listen_and_play(
             )
 
             def debug_callback_send(outdata, frames, time, status):
+
                 if status:
                     print(status)
                 try:
@@ -187,13 +186,22 @@ def listen_and_play(
                 except StopIteration:
                     raise sd.CallbackStop()
 
-            send_stream = sd.OutputStream(
-                samplerate=send_rate,
-                channels=1,
-                callback=debug_callback_send,
-                blocksize=list_play_chunk_size // 2,
-                dtype="int16",
-            )
+            if debug_audio_listen:
+                send_stream = sd.OutputStream(
+                    samplerate=send_rate,
+                    channels=1,
+                    callback=debug_callback_send,
+                    blocksize=list_play_chunk_size // 2,
+                    dtype="int16",
+                )
+            else:
+                send_stream = sd.InputStream(
+                    samplerate=send_rate,
+                    channels=1,
+                    callback=debug_callback_send,
+                    blocksize=list_play_chunk_size // 2,
+                    dtype="int16",
+                )
         else:
             send_stream = sd.InputStream(
                 samplerate=send_rate,
