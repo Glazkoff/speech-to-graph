@@ -26,7 +26,7 @@ class VADHandler(BaseHandler):
         thresh=0.3,
         sample_rate=16000,
         min_silence_ms=1000,
-        min_speech_ms=500,
+        min_speech_ms=200,
         max_speech_ms=float("inf"),
         speech_pad_ms=30,
         audio_enhancement=False,

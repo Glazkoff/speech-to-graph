@@ -21,7 +21,9 @@ from arguments_classes.socket_sender_arguments import SocketSenderArguments
 from arguments_classes.vad_arguments import VADHandlerArguments
 from arguments_classes.whisper_stt_arguments import WhisperSTTHandlerArguments
 from arguments_classes.melo_tts_arguments import MeloTTSHandlerArguments
-from arguments_classes.open_api_language_model_arguments import OpenApiLanguageModelHandlerArguments
+from arguments_classes.open_api_language_model_arguments import (
+    OpenApiLanguageModelHandlerArguments,
+)
 import torch
 import nltk
 from rich.console import Console
@@ -180,7 +182,6 @@ def prepare_all_args(
         chat_tts_handler_kwargs,
     )
 
-
     rename_args(whisper_stt_handler_kwargs, "stt")
     rename_args(paraformer_stt_handler_kwargs, "paraformer_stt")
     rename_args(language_model_handler_kwargs, "lm")
@@ -262,16 +263,48 @@ def build_pipeline(
         setup_kwargs=vars(vad_handler_kwargs),
     )
 
-    stt = get_stt_handler(module_kwargs, stop_event, spoken_prompt_queue, text_prompt_queue, whisper_stt_handler_kwargs, paraformer_stt_handler_kwargs)
-    lm = get_llm_handler(module_kwargs, stop_event, text_prompt_queue, lm_response_queue, language_model_handler_kwargs, open_api_language_model_handler_kwargs, mlx_language_model_handler_kwargs)
-    tts = get_tts_handler(module_kwargs, stop_event, lm_response_queue, send_audio_chunks_queue, should_listen, parler_tts_handler_kwargs, melo_tts_handler_kwargs, chat_tts_handler_kwargs)
+    stt = get_stt_handler(
+        module_kwargs,
+        stop_event,
+        spoken_prompt_queue,
+        text_prompt_queue,
+        whisper_stt_handler_kwargs,
+        paraformer_stt_handler_kwargs,
+    )
+    lm = get_llm_handler(
+        module_kwargs,
+        stop_event,
+        text_prompt_queue,
+        lm_response_queue,
+        language_model_handler_kwargs,
+        open_api_language_model_handler_kwargs,
+        mlx_language_model_handler_kwargs,
+    )
+    tts = get_tts_handler(
+        module_kwargs,
+        stop_event,
+        lm_response_queue,
+        send_audio_chunks_queue,
+        should_listen,
+        parler_tts_handler_kwargs,
+        melo_tts_handler_kwargs,
+        chat_tts_handler_kwargs,
+    )
 
     return ThreadManager([*comms_handlers, vad, stt, lm, tts])
 
 
-def get_stt_handler(module_kwargs, stop_event, spoken_prompt_queue, text_prompt_queue, whisper_stt_handler_kwargs, paraformer_stt_handler_kwargs):
+def get_stt_handler(
+    module_kwargs,
+    stop_event,
+    spoken_prompt_queue,
+    text_prompt_queue,
+    whisper_stt_handler_kwargs,
+    paraformer_stt_handler_kwargs,
+):
     if module_kwargs.stt == "whisper":
         from STT.whisper_stt_handler import WhisperSTTHandler
+
         return WhisperSTTHandler(
             stop_event,
             queue_in=spoken_prompt_queue,
@@ -280,6 +313,7 @@ def get_stt_handler(module_kwargs, stop_event, spoken_prompt_queue, text_prompt_
         )
     elif module_kwargs.stt == "whisper-mlx":
         from STT.lightning_whisper_mlx_handler import LightningWhisperSTTHandler
+
         return LightningWhisperSTTHandler(
             stop_event,
             queue_in=spoken_prompt_queue,
@@ -288,6 +322,7 @@ def get_stt_handler(module_kwargs, stop_event, spoken_prompt_queue, text_prompt_
         )
     elif module_kwargs.stt == "paraformer":
         from STT.paraformer_handler import ParaformerSTTHandler
+
         return ParaformerSTTHandler(
             stop_event,
             queue_in=spoken_prompt_queue,
@@ -295,20 +330,23 @@ def get_stt_handler(module_kwargs, stop_event, spoken_prompt_queue, text_prompt_
             setup_kwargs=vars(paraformer_stt_handler_kwargs),
         )
     else:
-        raise ValueError("The STT should be either whisper, whisper-mlx, or paraformer.")
+        raise ValueError(
+            "The STT should be either whisper, whisper-mlx, or paraformer."
+        )
 
 
 def get_llm_handler(
-    module_kwargs, 
-    stop_event, 
-    text_prompt_queue, 
-    lm_response_queue, 
+    module_kwargs,
+    stop_event,
+    text_prompt_queue,
+    lm_response_queue,
     language_model_handler_kwargs,
     open_api_language_model_handler_kwargs,
-    mlx_language_model_handler_kwargs
+    mlx_language_model_handler_kwargs,
 ):
     if module_kwargs.llm == "transformers":
         from LLM.language_model import LanguageModelHandler
+
         return LanguageModelHandler(
             stop_event,
             queue_in=text_prompt_queue,
@@ -317,6 +355,7 @@ def get_llm_handler(
         )
     elif module_kwargs.llm == "open_api":
         from LLM.openai_api_language_model import OpenApiModelHandler
+
         return OpenApiModelHandler(
             stop_event,
             queue_in=text_prompt_queue,
@@ -326,6 +365,7 @@ def get_llm_handler(
 
     elif module_kwargs.llm == "mlx-lm":
         from LLM.mlx_language_model import MLXLanguageModelHandler
+
         return MLXLanguageModelHandler(
             stop_event,
             queue_in=text_prompt_queue,
@@ -337,9 +377,19 @@ def get_llm_handler(
         raise ValueError("The LLM should be either transformers or mlx-lm")
 
 
-def get_tts_handler(module_kwargs, stop_event, lm_response_queue, send_audio_chunks_queue, should_listen, parler_tts_handler_kwargs, melo_tts_handler_kwargs, chat_tts_handler_kwargs):
+def get_tts_handler(
+    module_kwargs,
+    stop_event,
+    lm_response_queue,
+    send_audio_chunks_queue,
+    should_listen,
+    parler_tts_handler_kwargs,
+    melo_tts_handler_kwargs,
+    chat_tts_handler_kwargs,
+):
     if module_kwargs.tts == "parler":
         from TTS.parler_handler import ParlerTTSHandler
+
         return ParlerTTSHandler(
             stop_event,
             queue_in=lm_response_queue,

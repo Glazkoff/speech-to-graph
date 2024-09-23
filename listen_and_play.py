@@ -5,11 +5,9 @@ from dataclasses import dataclass, field
 import sounddevice as sd
 from transformers import HfArgumentParser
 import os
-import wave
 import numpy as np
 import soundfile as sf
 from pydub import AudioSegment
-import io
 
 
 @dataclass
@@ -40,7 +38,9 @@ class ListenAndPlayArguments:
     )
     debug_audio_listen: bool = field(
         default=False,
-        metadata={"help": "Enable audio file debug mode. Default is False."},
+        metadata={
+            "help": "Enable audio file debug mode for listening. Default is False."
+        },
     )
     verbose: bool = field(
         default=False,
@@ -82,12 +82,11 @@ def listen_and_play(
     def callback_recv(outdata, frames, time, status):
         if not recv_queue.empty():
             data = recv_queue.get()
-            # Convert byte data to a NumPy array and reshape it accordingly
             audio_data = np.frombuffer(data, dtype=np.int16)
             outdata[: len(audio_data)] = audio_data.reshape(-1, 1)
-            outdata[len(audio_data) :] = 0  # Fill the rest with zeros if necessary
+            outdata[len(audio_data) :] = 0
         else:
-            outdata.fill(0)  # Fill the output with silence if there's no data
+            outdata.fill(0)
 
     def send(stop_event, send_queue):
         while not stop_event.is_set():
@@ -100,7 +99,7 @@ def listen_and_play(
             while len(data) < chunk_size:
                 packet = conn.recv(chunk_size - len(data))
                 if not packet:
-                    return None  # Connection has been closed
+                    return None
                 data += packet
             return data
 
@@ -109,17 +108,32 @@ def listen_and_play(
             if data:
                 recv_queue.put(data)
 
-    def ask_for_audio_file():
+    def select_audio_file():
         audio_samples_dir = "audio_samples"
         audio_files = [
             f for f in os.listdir(audio_samples_dir) if f.endswith((".mp3", ".wav"))
         ]
-        print("Available audio files:")
+        print("\nAvailable audio files:")
         for i, file in enumerate(audio_files):
             print(f"{i + 1}. {file}")
-        file_number = int(input("Enter the number of the audio file to use: ")) - 1
-        audio_file_path = os.path.join(audio_samples_dir, audio_files[file_number])
-        return audio_file_path
+        while True:
+            try:
+                file_number = (
+                    int(
+                        input(
+                            "Enter the number of the audio file to use (or -1 to quit): "
+                        )
+                    )
+                    - 1
+                )
+                if file_number == -1:
+                    return None
+                if 0 <= file_number < len(audio_files):
+                    return os.path.join(audio_samples_dir, audio_files[file_number])
+                else:
+                    print("Invalid selection. Please try again.")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
 
     def audio_input_stream(file_path, chunk_size, sample_rate):
         _, ext = os.path.splitext(file_path)
@@ -157,26 +171,24 @@ def listen_and_play(
                 while True:
                     data = sf_file.read(chunk_size, dtype="int16")
                     if len(data) == 0:
-                        audio_file_path = ask_for_audio_file()
-                        return audio_input_stream(
-                            audio_file_path, list_play_chunk_size // 2, send_rate
-                        )
-                        # break
-
+                        break
                     if len(data) < chunk_size:
                         data = np.pad(data, (0, chunk_size - len(data)), "constant")
                     yield data
 
     try:
         if debug_audio or debug_audio_listen:
-            audio_file_path = ask_for_audio_file()
+            audio_file_path = select_audio_file()
+            if audio_file_path is None:
+                print("Exiting...")
+                return
 
             audio_stream = audio_input_stream(
                 audio_file_path, list_play_chunk_size // 2, send_rate
             )
 
             def debug_callback_send(outdata, frames, time, status):
-
+                nonlocal audio_stream
                 if status:
                     print(status)
                 try:
@@ -184,7 +196,9 @@ def listen_and_play(
                     outdata[:] = data.reshape(-1, 1)
                     send_queue.put(bytes(data))
                 except StopIteration:
-                    raise sd.CallbackStop()
+                    print("\nEnd of file reached.")
+                    file_change_event.set()
+                    outdata.fill(0)
 
             if debug_audio_listen:
                 send_stream = sd.OutputStream(
@@ -220,13 +234,22 @@ def listen_and_play(
         )
 
         with send_stream, recv_stream:
-            print("Streams started. Press Enter to stop...")
+            print("Streams started. Press Enter to stop or change file...")
             send_thread = threading.Thread(target=send, args=(stop_event, send_queue))
             recv_thread = threading.Thread(target=recv, args=(stop_event, recv_queue))
             send_thread.start()
             recv_thread.start()
 
-            input()
+            while True:
+                if file_change_event.is_set() or input() == "":
+                    file_change_event.clear()
+                    new_file = select_audio_file()
+                    if new_file is None:
+                        break
+                    audio_stream = audio_input_stream(
+                        new_file, list_play_chunk_size // 2, send_rate
+                    )
+                    print(f"Switched to file: {new_file}")
 
     except KeyboardInterrupt:
         print("Finished streaming.")

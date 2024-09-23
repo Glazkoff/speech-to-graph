@@ -25,7 +25,9 @@ WHISPER_LANGUAGE_TO_LLM_LANGUAGE = {
     "zh": "chinese",
     "ja": "japanese",
     "ko": "korean",
+    "ru": "russian",
 }
+
 
 class LanguageModelHandler(BaseHandler):
     """
@@ -115,7 +117,10 @@ class LanguageModelHandler(BaseHandler):
         language_code = None
         if isinstance(prompt, tuple):
             prompt, language_code = prompt
-            prompt = f"Please reply to my message in {WHISPER_LANGUAGE_TO_LLM_LANGUAGE[language_code]}. " + prompt
+            prompt = (
+                f"Please reply to my message in {WHISPER_LANGUAGE_TO_LLM_LANGUAGE[language_code]}. "
+                + prompt
+            )
 
         self.chat.append({"role": self.user_role, "content": prompt})
         thread = Thread(
