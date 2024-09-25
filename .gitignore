@@ -4,3 +4,4 @@ cache
 audio_samples/*.mp3
 audio_samples/*.wav
 audio_samples/*.txt
+audio_samples/*.ogg
