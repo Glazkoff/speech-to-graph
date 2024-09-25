@@ -387,8 +387,9 @@ def get_tts_handler(
     melo_tts_handler_kwargs,
     chat_tts_handler_kwargs,
 ):
+    console.print(f"[blue]+++ {module_kwargs.tts}")
     if module_kwargs.tts == "parler":
-        from TTS.parler_handler import ParlerTTSHandler
+        from TTS_module.parler_handler import ParlerTTSHandler
 
         return ParlerTTSHandler(
             stop_event,
@@ -399,7 +400,7 @@ def get_tts_handler(
         )
     elif module_kwargs.tts == "melo":
         try:
-            from TTS.melo_handler import MeloTTSHandler
+            from TTS_module.melo_handler import MeloTTSHandler
         except RuntimeError as e:
             logger.error(
                 "Error importing MeloTTSHandler. You might need to run: python -m unidic download"
@@ -414,7 +415,7 @@ def get_tts_handler(
         )
     elif module_kwargs.tts == "chatTTS":
         try:
-            from TTS.chatTTS_handler import ChatTTSHandler
+            from TTS_module.chatTTS_handler import ChatTTSHandler
         except RuntimeError as e:
             logger.error("Error importing ChatTTSHandler")
             raise e
@@ -425,8 +426,21 @@ def get_tts_handler(
             setup_args=(should_listen,),
             setup_kwargs=vars(chat_tts_handler_kwargs),
         )
+    elif module_kwargs.tts == "xttsv2":
+        try:
+            from TTS_module.xttsv2_handler import XTTSv2Handler
+        except RuntimeError as e:
+            logger.error("Error importing XTTSv2Handler")
+            raise e
+        return XTTSv2Handler(
+            stop_event,
+            queue_in=lm_response_queue,
+            queue_out=send_audio_chunks_queue,
+            setup_args=(should_listen,),
+            setup_kwargs=vars(melo_tts_handler_kwargs),
+        )
     else:
-        raise ValueError("The TTS should be either parler, melo or chatTTS")
+        raise ValueError("The TTS should be either parler, melo, chatTTS or xttsv2")
 
 
 def main():
