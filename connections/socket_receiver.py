@@ -48,13 +48,15 @@ class SocketReceiver:
         logger.info("receiver connected")
 
         self.should_listen.set()
-        while not self.stop_event.is_set():
+        # while not self.stop_event.is_set():
+        while True:
+            # console.print("[yellow]listening...")
             audio_chunk = self.receive_full_chunk(self.conn, self.chunk_size)
             if audio_chunk is None:
                 # connection closed
                 self.queue_out.put(b"END")
                 break
-            if self.should_listen.is_set():
+            if self.should_listen.is_set() or True:
                 self.queue_out.put(audio_chunk)
         self.conn.close()
         logger.info("Receiver closed")

@@ -15,14 +15,10 @@ console = Console()
 
 
 class VADHandler(BaseHandler):
-    """
-    Handles voice activity detection. When voice activity is detected, audio will be accumulated until the end of speech is detected and then passed
-    to the following part.
-    """
-
     def setup(
         self,
         should_listen,
+        should_speak,
         thresh=0.3,
         sample_rate=16000,
         min_silence_ms=1000,
@@ -32,6 +28,7 @@ class VADHandler(BaseHandler):
         audio_enhancement=False,
     ):
         self.should_listen = should_listen
+        self.should_speak = should_speak
         self.sample_rate = sample_rate
         self.min_silence_ms = min_silence_ms
         self.min_speech_ms = min_speech_ms
@@ -48,44 +45,63 @@ class VADHandler(BaseHandler):
         if audio_enhancement:
             self.enhanced_model, self.df_state, _ = init_df()
 
+        self.is_speaking = False
+        self.buffer = []
+
     def process(self, audio_chunk):
         audio_int16 = np.frombuffer(audio_chunk, dtype=np.int16)
         audio_float32 = int2float(audio_int16)
-        vad_output = self.iterator(torch.from_numpy(audio_float32))
-        if vad_output is not None and len(vad_output) != 0:
-            logger.debug("VAD: end of speech detected")
-            array = torch.cat(vad_output).cpu().numpy()
-            duration_ms = len(array) / self.sample_rate * 1000
-            if duration_ms < self.min_speech_ms or duration_ms > self.max_speech_ms:
-                logger.debug(
-                    f"audio input of duration: {len(array) / self.sample_rate}s, skipping"
-                )
-            else:
-                # self.should_listen.clear()
-                logger.debug("Stop listening")
-                if self.audio_enhancement:
-                    if self.sample_rate != self.df_state.sr():
-                        audio_float32 = torchaudio.functional.resample(
-                            torch.from_numpy(array),
-                            orig_freq=self.sample_rate,
-                            new_freq=self.df_state.sr(),
-                        )
-                        enhanced = enhance(
-                            self.enhanced_model,
-                            self.df_state,
-                            audio_float32.unsqueeze(0),
-                        )
-                        enhanced = torchaudio.functional.resample(
-                            enhanced,
-                            orig_freq=self.df_state.sr(),
-                            new_freq=self.sample_rate,
-                        )
-                    else:
-                        enhanced = enhance(
-                            self.enhanced_model, self.df_state, audio_float32
-                        )
-                    array = enhanced.numpy().squeeze()
-                yield array
+        status, audio = self.iterator(torch.from_numpy(audio_float32))
+
+        if status == "start":
+            logger.debug("VAD: start of speech detected")
+            self.is_speaking = True
+            self.should_speak.clear()
+            self.buffer = [audio.numpy()]
+        elif status == "continue":
+            if self.is_speaking:
+                self.buffer.append(audio.numpy())
+        elif status == "end":
+            if self.is_speaking:
+                logger.debug("VAD: end of speech detected")
+                self.is_speaking = False
+                self.buffer.append(audio.numpy())
+                array = np.concatenate(self.buffer)
+                duration_ms = len(array) / self.sample_rate * 1000
+
+                if self.min_speech_ms <= duration_ms <= self.max_speech_ms:
+                    logger.debug(f"Speech duration: {duration_ms:.2f}ms")
+                    self.should_speak.set()
+
+                    if self.audio_enhancement:
+                        array = self._enhance_audio(array)
+
+                    yield array
+                else:
+                    logger.debug(
+                        f"Speech duration {duration_ms:.2f}ms out of range, skipping"
+                    )
+
+                self.buffer = []
+
+    def _enhance_audio(self, audio):
+        if self.sample_rate != self.df_state.sr():
+            audio = torchaudio.functional.resample(
+                torch.from_numpy(audio),
+                orig_freq=self.sample_rate,
+                new_freq=self.df_state.sr(),
+            )
+
+        enhanced = enhance(self.enhanced_model, self.df_state, audio.unsqueeze(0))
+
+        if self.sample_rate != self.df_state.sr():
+            enhanced = torchaudio.functional.resample(
+                enhanced,
+                orig_freq=self.df_state.sr(),
+                new_freq=self.sample_rate,
+            )
+
+        return enhanced.numpy().squeeze()
 
     @property
     def min_time_to_debug(self):

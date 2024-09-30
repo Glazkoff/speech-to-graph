@@ -28,6 +28,7 @@ class SocketSender:
         logger.info("sender connected")
 
         while not self.stop_event.is_set():
+            # console.print("[purple]sending...")
             audio_chunk = self.queue_in.get()
             self.conn.sendall(audio_chunk)
             if isinstance(audio_chunk, bytes) and audio_chunk == b"END":

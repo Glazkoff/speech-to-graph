@@ -145,5 +145,7 @@ class LanguageModelHandler(BaseHandler):
 
         self.chat.append({"role": "assistant", "content": generated_text})
 
+        console.print(f"[green]ASSISTANT: {printable_text}")
+
         # don't forget last sentence
         yield (printable_text, language_code)

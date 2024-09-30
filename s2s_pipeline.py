@@ -196,6 +196,7 @@ def initialize_queues_and_events():
     return {
         "stop_event": Event(),
         "should_listen": Event(),
+        "should_speak": Event(),
         "recv_audio_chunks_queue": Queue(),
         "send_audio_chunks_queue": Queue(),
         "spoken_prompt_queue": Queue(),
@@ -221,6 +222,7 @@ def build_pipeline(
 ):
     stop_event = queues_and_events["stop_event"]
     should_listen = queues_and_events["should_listen"]
+    should_speak = queues_and_events["should_speak"]
     recv_audio_chunks_queue = queues_and_events["recv_audio_chunks_queue"]
     send_audio_chunks_queue = queues_and_events["send_audio_chunks_queue"]
     spoken_prompt_queue = queues_and_events["spoken_prompt_queue"]
@@ -234,6 +236,7 @@ def build_pipeline(
         )
         comms_handlers = [local_audio_streamer]
         should_listen.set()
+        # should_speak.set()
     else:
         from connections.socket_receiver import SocketReceiver
         from connections.socket_sender import SocketSender
@@ -259,7 +262,10 @@ def build_pipeline(
         stop_event,
         queue_in=recv_audio_chunks_queue,
         queue_out=spoken_prompt_queue,
-        setup_args=(should_listen,),
+        setup_args=(
+            should_listen,
+            should_speak,
+        ),
         setup_kwargs=vars(vad_handler_kwargs),
     )
 
@@ -280,18 +286,27 @@ def build_pipeline(
         open_api_language_model_handler_kwargs,
         mlx_language_model_handler_kwargs,
     )
-    tts = get_tts_handler(
-        module_kwargs,
-        stop_event,
-        lm_response_queue,
-        send_audio_chunks_queue,
-        should_listen,
-        parler_tts_handler_kwargs,
-        melo_tts_handler_kwargs,
-        chat_tts_handler_kwargs,
-    )
+    # tts = get_tts_handler(
+    #     module_kwargs,
+    #     stop_event,
+    #     lm_response_queue,
+    #     send_audio_chunks_queue,
+    #     should_listen,
+    #     should_speak,
+    #     parler_tts_handler_kwargs,
+    #     melo_tts_handler_kwargs,
+    #     chat_tts_handler_kwargs,
+    # )
 
-    return ThreadManager([*comms_handlers, vad, stt, lm, tts])
+    return ThreadManager(
+        [
+            *comms_handlers,
+            vad,
+            stt,
+            lm,
+            #   tts
+        ]
+    )
 
 
 def get_stt_handler(
@@ -383,6 +398,7 @@ def get_tts_handler(
     lm_response_queue,
     send_audio_chunks_queue,
     should_listen,
+    should_speak,
     parler_tts_handler_kwargs,
     melo_tts_handler_kwargs,
     chat_tts_handler_kwargs,
@@ -436,7 +452,10 @@ def get_tts_handler(
             stop_event,
             queue_in=lm_response_queue,
             queue_out=send_audio_chunks_queue,
-            setup_args=(should_listen,),
+            setup_args=(
+                should_listen,
+                should_speak,
+            ),
             setup_kwargs=vars(melo_tts_handler_kwargs),
         )
     else:

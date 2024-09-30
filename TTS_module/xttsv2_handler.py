@@ -26,6 +26,7 @@ class XTTSv2Handler(BaseHandler):
     def setup(
         self,
         should_listen,
+        should_speak,
         device="mps",
         language="ru",
         speaker_to_id="ru",
@@ -33,6 +34,7 @@ class XTTSv2Handler(BaseHandler):
         blocksize=512,
     ):
         self.should_listen = should_listen
+        self.should_speak = should_speak
         self.device = device
         self.language = language
         cuda_device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -82,6 +84,9 @@ class XTTSv2Handler(BaseHandler):
             )  # Removing this line makes it fail more often. I'm looking into it.
 
         try:
+            if not self.should_speak.is_set():
+                self.clean_in_queue()
+                return
             console.print(
                 f"[blue]{llm_sentence} - {self.language} - {self.speaker_wav}"
             )
@@ -100,9 +105,13 @@ class XTTSv2Handler(BaseHandler):
         audio_chunk = librosa.resample(audio_chunk, orig_sr=24000, target_sr=16000)
         audio_chunk = (audio_chunk * 32768).astype(np.int16)
         for i in range(0, len(audio_chunk), self.blocksize):
-            yield np.pad(
-                audio_chunk[i : i + self.blocksize],
-                (0, self.blocksize - len(audio_chunk[i : i + self.blocksize])),
-            )
+            if self.should_speak.is_set():
+                yield np.pad(
+                    audio_chunk[i : i + self.blocksize],
+                    (0, self.blocksize - len(audio_chunk[i : i + self.blocksize])),
+                )
+            else:
+                self.clean_in_queue()
+                break
 
         self.should_listen.set()

@@ -47,10 +47,16 @@ class BaseHandler:
     @property
     def last_time(self):
         return self._times[-1]
-    
+
     @property
     def min_time_to_debug(self):
         return 0.001
 
     def cleanup(self):
         pass
+
+    def clean_in_queue(self):
+        with self.queue_in.mutex:
+            self.queue_in.queue.clear()
+            self.queue_in.all_tasks_done.notify_all()
+            self.queue_in.unfinished_tasks = 0
