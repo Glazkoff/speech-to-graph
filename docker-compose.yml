@@ -1,7 +1,12 @@
 ---
+networks:
+  neo4j-network:
+    driver: bridge
+
 services:
 
   pipeline:
+    container_name: s2s_pipeline
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
@@ -16,12 +21,18 @@ services:
       - microsoft/Phi-3-mini-4k-instruct 
       - --init_chat_role 
       - system
-      - --init_chat_prompt
-      - "You are a helpful assistant"
-      - --stt_compile_mode 
-      - reduce-overhead 
+      - --tts
+      - xttsv2
       - --tts_compile_mode 
       - default
+      - --stt_compile_mode 
+      - reduce-overhead
+      - --stt_model_name
+      - openai/whisper-large-v3
+      - --language
+      - ru
+      - --log_level
+      - info
     expose:
       - 12345/tcp
       - 12346/tcp
@@ -38,3 +49,17 @@ services:
             - driver: nvidia
               device_ids: ['0']
               capabilities: [gpu]
+    networks:
+      - neo4j-network
+
+  neo4j:
+    container_name: neo4j
+    image: neo4j:latest
+    networks:
+      - neo4j-network
+    ports:
+      - '7888:7474'
+      - '7999:7687'
+    environment:
+      - NEO4J_AUTH=neo4j/testtest
+      - NEO4JLABS_PLUGINS=["apoc", "graph-data-science"]

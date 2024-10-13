@@ -8,6 +8,7 @@ from threading import Event
 from typing import Optional
 from sys import platform
 from VAD.vad_handler import VADHandler
+from KG.langchain_graph_constructor import LangchainGraphConstructionHandler
 from arguments_classes.chat_tts_arguments import ChatTTSHandlerArguments
 from arguments_classes.language_model_arguments import LanguageModelHandlerArguments
 from arguments_classes.mlx_language_model_arguments import (
@@ -277,15 +278,17 @@ def build_pipeline(
         whisper_stt_handler_kwargs,
         paraformer_stt_handler_kwargs,
     )
-    lm = get_llm_handler(
-        module_kwargs,
-        stop_event,
-        text_prompt_queue,
-        lm_response_queue,
-        language_model_handler_kwargs,
-        open_api_language_model_handler_kwargs,
-        mlx_language_model_handler_kwargs,
-    )
+    # lm = get_llm_handler(
+    #     module_kwargs,
+    #     stop_event,
+    #     text_prompt_queue,
+    #     lm_response_queue,
+    #     language_model_handler_kwargs,
+    #     open_api_language_model_handler_kwargs,
+    #     mlx_language_model_handler_kwargs,
+    # )
+    kg = LangchainGraphConstructionHandler(stop_event=stop_event, queue_in=text_prompt_queue,
+    queue_out=lm_response_queue)
     # tts = get_tts_handler(
     #     module_kwargs,
     #     stop_event,
@@ -303,7 +306,8 @@ def build_pipeline(
             *comms_handlers,
             vad,
             stt,
-            lm,
+            # lm,
+            kg
             #   tts
         ]
     )
